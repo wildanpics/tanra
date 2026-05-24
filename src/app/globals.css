@@ -1,0 +1,211 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0E1116;
+  --color-card: #171B22;
+  --color-accent: #C8A96B;
+  --color-danger: #A63D40;
+  --color-text-primary: #F5F5F5;
+  --color-text-secondary: #8A8F98;
+  --color-border: #262B33;
+  --font-display: var(--font-cinzel), Cinzel, serif;
+  --font-sans: var(--font-inter), Inter, sans-serif;
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-fog: fog-drift 8s ease-in-out infinite;
+}
+
+:root {
+  --bg: #0E1116;
+  --card: #171B22;
+  --accent: #C8A96B;
+  --danger: #A63D40;
+  --text: #F5F5F5;
+  --text-secondary: #8A8F98;
+  --border: #262B33;
+}
+
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Font utilities */
+.font-display {
+  font-family: 'Cinzel', serif;
+}
+
+.font-sans {
+  font-family: 'Inter', sans-serif;
+}
+
+/* TANRA specific animations */
+@keyframes fog-drift {
+  0% { transform: translateX(-10%) translateY(0); opacity: 0.3; }
+  50% { transform: translateX(5%) translateY(-5%); opacity: 0.5; }
+  100% { transform: translateX(-10%) translateY(0); opacity: 0.3; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 10px rgba(200, 169, 107, 0.3); }
+  50% { box-shadow: 0 0 25px rgba(200, 169, 107, 0.7), 0 0 50px rgba(200, 169, 107, 0.3); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes grain {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-1%, -1%); }
+  20% { transform: translate(1%, 1%); }
+  30% { transform: translate(-1%, 1%); }
+  40% { transform: translate(1%, -1%); }
+  50% { transform: translate(-1%, 0); }
+  60% { transform: translate(0, 1%); }
+  70% { transform: translate(1%, 0); }
+  80% { transform: translate(-1%, 1%); }
+  90% { transform: translate(1%, -1%); }
+}
+
+.animate-fog {
+  animation: fog-drift 8s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(200, 169, 107, 0) 0%,
+    rgba(200, 169, 107, 0.15) 50%,
+    rgba(200, 169, 107, 0) 100%
+  );
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Batik pattern overlay (subtle) */
+.batik-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23C8A96B' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(23, 27, 34, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(38, 43, 51, 0.8);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #C8A96B 0%, #F5D98A 50%, #C8A96B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Mobile safe areas */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Game phase indicator */
+.phase-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Touch targets */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Nusantara ornament */
+.ornament {
+  position: relative;
+}
+.ornament::before,
+.ornament::after {
+  content: '◆';
+  color: var(--accent);
+  opacity: 0.4;
+  font-size: 0.5em;
+  margin: 0 0.5em;
+}
+
+/* Fog layers */
+.fog-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(14, 17, 22, 0.8) 100%);
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(200, 169, 107, 0.1);
+}
+
+/* Input styles */
+input:focus, textarea:focus {
+  outline: none;
+}
+
+/* PWA status bar spacing */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-area-top {
+    padding-top: calc(env(safe-area-inset-top) + 1rem);
+  }
+}

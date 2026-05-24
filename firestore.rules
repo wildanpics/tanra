@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Word pairs - read only for authenticated users
+    match /wordPairs/{wordId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only admin/Cloud Functions
+    }
+
+    // Rooms
+    match /rooms/{roomId} {
+      allow read: if request.auth != null;
+
+      // Create room - authenticated user becomes host
+      allow create: if request.auth != null
+        && request.resource.data.hostId == request.auth.uid;
+
+      // Update room - only players in the room can update
+      allow update: if request.auth != null
+        && (
+          // Host can do anything
+          resource.data.hostId == request.auth.uid
+          // Players can update their own data only
+          || (
+            request.auth.uid in resource.data.players
+            && onlyUpdatingOwnPlayerData(request, resource, request.auth.uid)
+          )
+        );
+
+      allow delete: if request.auth != null && resource.data.hostId == request.auth.uid;
+
+      // Messages subcollection
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if false;
+      }
+    }
+  }
+
+  function onlyUpdatingOwnPlayerData(request, resource, uid) {
+    let allowedKeys = [
+      'players.' + uid + '.isReady',
+      'players.' + uid + '.votedFor',
+      'players.' + uid + '.isMuted',
+    ];
+    return request.resource.data.diff(resource.data).affectedKeys()
+      .hasOnly(allowedKeys);
+  }
+}
