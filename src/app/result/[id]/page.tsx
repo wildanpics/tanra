@@ -106,9 +106,14 @@ export default function ResultPage() {
         cacheBust: true,
         quality: 1,
         pixelRatio: 2,
+        width: 540,
+        height: 960,
         style: {
           background: "#050505",
-          transform: "none",
+          transform: "scale(1)",
+          transformOrigin: "top left",
+          width: "540px",
+          height: "960px",
         }
       });
       
@@ -447,7 +452,7 @@ export default function ResultPage() {
 
         {/* --- TEMPORARY CANVAS FOR SPOTIFY WRAPPED SHARE --- */}
         <div className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#050505] transition-opacity duration-300 ${isGenerating ? 'opacity-100' : 'opacity-0 pointer-events-none -z-50'}`}>
-          <div ref={shareCardRef} className="relative overflow-hidden w-[460px] aspect-[9/16] p-8 bg-[#050505] flex flex-col border border-white/5 rounded-[40px]">
+          <div ref={shareCardRef} style={{ width: 540, height: 960, minWidth: 540, minHeight: 960 }} className="relative overflow-hidden p-10 bg-[#050505] flex flex-col border border-white/5 rounded-[48px]">
             
             {/* Background Glows (Red if lose, Gold if win, Purple if Jester) */}
             <div className={`absolute -top-32 -left-32 w-[400px] h-[400px] rounded-full blur-[130px] opacity-70 ${bgGlowClass}`} />
