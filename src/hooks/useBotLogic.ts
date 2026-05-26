@@ -75,20 +75,41 @@ export function useBotLogic(room: Room | null, isHost: boolean, onNextTurn: () =
           const cat = settings.category || "Semua Kategori";
           const catClues = categoryClues[cat] || genericClues;
           
-          if (currentPlayer.role === "civilian") {
-            // Civilian bot has 30% chance to say length/letter
-            if (Math.random() < 0.3 && currentPlayer.word) {
-              const types = [
-                `Kata ini berawalan huruf ${currentPlayer.word.charAt(0).toUpperCase()}`,
-                `Kata ini terdiri dari ${currentPlayer.word.length} huruf`
-              ];
-              clue = types[Math.floor(Math.random() * types.length)];
+          if (currentPlayer.role === "civilian" && currentPlayer.word) {
+            const word = currentPlayer.word.trim();
+            const wordsCount = word.split(" ").length;
+            
+            const dynamicTypes = [
+               `Kata ini terdiri dari ${word.replace(/\s/g, '').length} huruf.`,
+               `Huruf depan kata ini adalah '${word.charAt(0).toUpperCase()}'.`,
+               `Huruf terakhirnya adalah '${word.charAt(word.length - 1).toUpperCase()}'.`,
+            ];
+            
+            if (wordsCount > 1) {
+               dynamicTypes.push(`Tebakan kali ini terdiri dari ${wordsCount} kata loh.`);
+            }
+            
+            // 40% chance to use a smart dynamic clue (Word Analyzer)
+            if (Math.random() < 0.4) {
+               clue = dynamicTypes[Math.floor(Math.random() * dynamicTypes.length)];
             } else {
-              clue = catClues[Math.floor(Math.random() * catClues.length)];
+               clue = catClues[Math.floor(Math.random() * catClues.length)];
             }
           } else {
-            // Impostor, Mr White, Jester bots just use random category generic clues to blend in
-            clue = catClues[Math.floor(Math.random() * catClues.length)];
+            // Impostor, Mr White, Jester bots
+            // Impostor Blending: If not the first to speak, pretend to agree with others
+            if (gameState.currentClueIndex && gameState.currentClueIndex > 0 && Math.random() < 0.6) {
+               const impostorBlends = [
+                 "Aku setuju sama yang tadi sih, barang ini emang umum.",
+                 "Sama kayak yang sebelumnya, menurutku ini sering kita lihat.",
+                 "Iya bener, ukurannya emang bervariasi tergantung jenisnya.",
+                 "Aku tadinya mau kasih clue yang sama, tapi ya udahlah: ini gampang ditemuin.",
+                 "Clue-ku mirip sama yang lain, intinya ini ada di sekitar kita."
+               ];
+               clue = impostorBlends[Math.floor(Math.random() * impostorBlends.length)];
+            } else {
+               clue = catClues[Math.floor(Math.random() * catClues.length)];
+            }
           }
 
           // Send message
@@ -153,15 +174,39 @@ export function useBotLogic(room: Room | null, isHost: boolean, onNextTurn: () =
         setTimeout(async () => {
           // Re-fetch alive players
           const latestAlive = Object.values(room.players).filter((p: any) => p.isAlive);
-          // Pick a random alive target (prefer someone else)
-          let target = latestAlive[Math.floor(Math.random() * latestAlive.length)];
-          if (target.id === bot.id && latestAlive.length > 1) {
-             const others = latestAlive.filter(p => p.id !== bot.id);
-             target = others[Math.floor(Math.random() * others.length)];
+          
+          // Bandwagon Logic: Check who currently has the most votes
+          const voteCounts: Record<string, number> = {};
+          Object.values(room.players).forEach(p => {
+             if (p.votedFor) {
+               voteCounts[p.votedFor] = (voteCounts[p.votedFor] || 0) + 1;
+             }
+          });
+          
+          const sortedCandidates = Object.entries(voteCounts).sort((a,b) => b[1] - a[1]);
+          let target: Player | undefined;
+          
+          // 70% chance to follow the bandwagon if someone has votes (and it's not the bot itself)
+          if (sortedCandidates.length > 0 && Math.random() < 0.7) {
+             const topCandidateId = sortedCandidates[0][0];
+             if (bot.role !== "jester" && topCandidateId !== bot.id) {
+                target = latestAlive.find(p => p.id === topCandidateId);
+             }
           }
           
-          await castVote(room.id, bot.id, target.id);
-        }, 3000 + (index * 2000) + Math.random() * 2000); // Staggered votes
+          // Fallback to random if no bandwagon or if they choose to vote independently
+          if (!target) {
+            target = latestAlive[Math.floor(Math.random() * latestAlive.length)];
+            if (target.id === bot.id && latestAlive.length > 1) {
+               const others = latestAlive.filter(p => p.id !== bot.id);
+               target = others[Math.floor(Math.random() * others.length)];
+            }
+          }
+          
+          if (target) {
+            await castVote(room.id, bot.id, target.id);
+          }
+        }, 4000 + (index * 3000) + Math.random() * 2000); // Staggered votes with longer delay to allow humans to vote first
       });
     }
 

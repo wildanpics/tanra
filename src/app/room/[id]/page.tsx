@@ -134,12 +134,20 @@ export default function RoomPage() {
   async function addBot() {
     if (!isHost || !room) return;
     const botId = `bot_${Date.now()}`;
-    const botNames = ["Jason", "Nova", "Alex", "Sam", "Charlie", "Max", "Riley", "Taylor", "Jordan", "Casey"];
-    const randomName = botNames[Math.floor(Math.random() * botNames.length)];
+    const botNames = ["Jason", "Nova", "Alex", "Sam", "Charlie", "Max", "Riley", "Taylor", "Jordan", "Casey", "Budi", "Siti", "Joko", "Ayu", "Reza"];
+    
+    // Filter nama bot yang belum ada di dalam room
+    const existingNames = players.map(p => p.username);
+    const availableNames = botNames.filter(name => !existingNames.includes(`Bot_${name}`));
+    
+    const randomName = availableNames.length > 0 
+      ? availableNames[Math.floor(Math.random() * availableNames.length)]
+      : `X${Math.floor(Math.random() * 1000)}`;
+      
     const botPlayer: Player = {
       id: botId,
       username: `Bot_${randomName}`,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${botId}`,
+      avatar: `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${randomName}`,
       isAlive: true,
       isReady: true,
       isBot: true,
