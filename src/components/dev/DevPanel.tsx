@@ -81,7 +81,7 @@ export function DevPanel() {
               {pathname.startsWith("/room/") && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl mt-3">
                   <p className="text-red-400 text-[10px] font-bold uppercase mb-2">Cheat Takdir (Host Only)</p>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button 
                       onClick={() => {
                         const newState = forceRole === "impostor" ? null : "impostor";
@@ -93,7 +93,7 @@ export function DevPanel() {
                         }
                         setForceRole(newState);
                       }}
-                      className={`flex-1 text-white text-[10px] py-1.5 rounded transition-colors ${
+                      className={`text-white text-[10px] py-1.5 rounded transition-colors ${
                         forceRole === "impostor" ? "bg-red-500 border border-red-400 font-bold" : "bg-red-500/20 hover:bg-red-500/50"
                       }`}
                     >
@@ -110,11 +110,45 @@ export function DevPanel() {
                         }
                         setForceRole(newState);
                       }}
-                      className={`flex-1 text-white text-[10px] py-1.5 rounded transition-colors ${
+                      className={`text-white text-[10px] py-1.5 rounded transition-colors ${
                         forceRole === "civilian" ? "bg-blue-500 border border-blue-400 font-bold" : "bg-blue-500/20 hover:bg-blue-500/50"
                       }`}
                     >
                       Jadi Warga
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const newState = forceRole === "mr_white" ? null : "mr_white";
+                        if (newState) {
+                          localStorage.setItem("TANRA_FORCE_ROLE", newState);
+                          alert("Berhasil! Anda pasti akan jadi Mr White ronde ini.");
+                        } else {
+                          localStorage.removeItem("TANRA_FORCE_ROLE");
+                        }
+                        setForceRole(newState);
+                      }}
+                      className={`text-white text-[10px] py-1.5 rounded transition-colors ${
+                        forceRole === "mr_white" ? "bg-yellow-500 border border-yellow-400 font-bold" : "bg-yellow-500/20 hover:bg-yellow-500/50"
+                      }`}
+                    >
+                      Jadi Mr White
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const newState = forceRole === "jester" ? null : "jester";
+                        if (newState) {
+                          localStorage.setItem("TANRA_FORCE_ROLE", newState);
+                          alert("Berhasil! Anda pasti akan jadi Jester ronde ini.");
+                        } else {
+                          localStorage.removeItem("TANRA_FORCE_ROLE");
+                        }
+                        setForceRole(newState);
+                      }}
+                      className={`text-white text-[10px] py-1.5 rounded transition-colors ${
+                        forceRole === "jester" ? "bg-purple-500 border border-purple-400 font-bold" : "bg-purple-500/20 hover:bg-purple-500/50"
+                      }`}
+                    >
+                      Jadi Jester
                     </button>
                   </div>
                 </div>

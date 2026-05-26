@@ -105,11 +105,36 @@ export default function RoomPage() {
           impostorIds[0] = profile.uid;
         }
         mrWhiteIds = mrWhiteIds.filter(id => id !== profile.uid);
+        jesterIds = jesterIds.filter(id => id !== profile.uid);
+      } else if (forceRole === "mr_white" && profile?.uid) {
+        if (!mrWhiteIds.includes(profile.uid)) {
+          mrWhiteIds[0] = profile.uid; // even if it was empty, this adds it
+        }
+        impostorIds = impostorIds.filter(id => id !== profile.uid);
+        jesterIds = jesterIds.filter(id => id !== profile.uid);
+        // Ensure there's still an impostor
+        if (impostorIds.length < targetImpostors) {
+          const candidates = players.filter(p => p.id !== profile.uid && !mrWhiteIds.includes(p.id) && !jesterIds.includes(p.id));
+          if (candidates.length > 0) impostorIds.push(candidates[0].id);
+        }
+      } else if (forceRole === "jester" && profile?.uid) {
+        if (!jesterIds.includes(profile.uid)) {
+          jesterIds[0] = profile.uid;
+        }
+        impostorIds = impostorIds.filter(id => id !== profile.uid);
+        mrWhiteIds = mrWhiteIds.filter(id => id !== profile.uid);
+        // Ensure there's still an impostor
+        if (impostorIds.length < targetImpostors) {
+          const candidates = players.filter(p => p.id !== profile.uid && !mrWhiteIds.includes(p.id) && !jesterIds.includes(p.id));
+          if (candidates.length > 0) impostorIds.push(candidates[0].id);
+        }
       } else if (forceRole === "civilian" && profile?.uid) {
         impostorIds = impostorIds.filter(id => id !== profile.uid);
         mrWhiteIds = mrWhiteIds.filter(id => id !== profile.uid);
+        jesterIds = jesterIds.filter(id => id !== profile.uid);
+        // Ensure there's still an impostor
         if (impostorIds.length < targetImpostors) {
-          const candidates = players.filter(p => p.id !== profile.uid && !impostorIds.includes(p.id));
+          const candidates = players.filter(p => p.id !== profile.uid && !mrWhiteIds.includes(p.id) && !jesterIds.includes(p.id) && !impostorIds.includes(p.id));
           if (candidates.length > 0) impostorIds.push(candidates[0].id);
         }
       }
