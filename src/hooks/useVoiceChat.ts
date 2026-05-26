@@ -25,6 +25,7 @@ interface VoiceChatState {
   isMuted: boolean;
   speakingParticipants: Set<string>;
   toggleMute: () => void;
+  setMuteState: (mute: boolean) => Promise<void>;
   disconnect: () => void;
   participants: string[];
 }
@@ -122,6 +123,33 @@ export function useVoiceChat({
     }
   }, [isMuted]);
 
+  const setMuteState = useCallback(async (mute: boolean) => {
+    if (mute === isMuted) return;
+    const room = roomRef.current;
+    if (!room) return;
+
+    const local = room.localParticipant;
+    if (!mute) {
+      try {
+        const track = await createLocalAudioTrack({
+          echoCancellation: true,
+          noiseSuppression: true,
+        });
+        await local.publishTrack(track);
+        setIsMuted(false);
+      } catch (err) {
+        console.error("Mic error:", err);
+      }
+    } else {
+      local.audioTrackPublications.forEach((pub) => {
+        if (pub.track) {
+          local.unpublishTrack(pub.track);
+        }
+      });
+      setIsMuted(true);
+    }
+  }, [isMuted]);
+
   const disconnect = useCallback(() => {
     roomRef.current?.disconnect();
   }, []);
@@ -131,6 +159,7 @@ export function useVoiceChat({
     isMuted,
     speakingParticipants,
     toggleMute,
+    setMuteState,
     disconnect,
     participants,
   };

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Player } from "@/types";
 import { sendMessage } from "@/features/room/useRoom";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 
 export default function HomePage() {
   const { user, profile, logout } = useAuth();
@@ -112,12 +113,15 @@ export default function HomePage() {
             <h1 className="font-display text-3xl font-black gradient-text">TANRA</h1>
             <p className="text-[#8A8F98] text-xs tracking-widest">DEDUKSI SOSIAL</p>
           </div>
-          <button
-            onClick={logout}
-            className="p-2 rounded-xl border border-[#262B33] text-[#8A8F98] hover:text-[#F5F5F5] hover:border-[#C8A96B]/30 transition-colors"
-          >
-            <LogOut size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <InstallPrompt />
+            <button
+              onClick={logout}
+              className="p-2 rounded-xl border border-[#262B33] text-[#8A8F98] hover:text-[#F5F5F5] hover:border-[#C8A96B]/30 transition-colors"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </motion.div>
 
         {/* Profile Card */}
@@ -140,11 +144,25 @@ export default function HomePage() {
             </div>
             <div>
               <p className="font-semibold text-[#F5F5F5]">{profile?.username}</p>
-              <p className="text-xs text-[#8A8F98]">{profile?.email}</p>
+              <p className="text-[10px] text-[#C8A96B] font-bold tracking-wider uppercase mt-0.5">
+                {profile ? (
+                  profile.impostorWins && profile.impostorWins >= 5 ? "Master of Deception" :
+                  profile.civilianWins && profile.civilianWins >= 10 ? "Detektif" :
+                  profile.mrWhiteWins && profile.mrWhiteWins >= 3 ? "The Joker" :
+                  profile.wins && profile.wins >= 5 ? "Veteran" :
+                  "Pemula"
+                ) : ""}
+              </p>
             </div>
-            <div className="ml-auto text-right">
-              <p className="text-[#C8A96B] font-bold text-lg">{profile?.gamesPlayed || 0}</p>
-              <p className="text-[#8A8F98] text-xs">Permainan</p>
+            <div className="ml-auto flex gap-4 text-right">
+              <div>
+                <p className="text-[#C8A96B] font-bold text-lg">{profile?.wins || 0}</p>
+                <p className="text-[#8A8F98] text-xs">Menang</p>
+              </div>
+              <div>
+                <p className="text-[#C8A96B] font-bold text-lg">{profile?.gamesPlayed || 0}</p>
+                <p className="text-[#8A8F98] text-xs">Main</p>
+              </div>
             </div>
           </GlassCard>
         </motion.div>

@@ -7,7 +7,7 @@ import {
   where,
   getDocs,
   updateDoc,
-
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Room, Player, RoomSettings, GameState } from "@/types";
@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS: RoomSettings = {
   difficulty: "easy",
   category: "Semua Kategori",
   mrWhiteCount: 0,
+  jesterCount: 0,
   hiddenDeath: false,
   micMode: "auto",
   impostorSabotage: false,
@@ -76,8 +77,7 @@ export async function joinRoom(
 ): Promise<string | null> {
   const q = query(
     collection(db, "rooms"),
-    where("code", "==", code.toUpperCase()),
-    where("status", "==", "waiting")
+    where("code", "==", code.toUpperCase())
   );
   const snap = await getDocs(q);
 
@@ -86,16 +86,24 @@ export async function joinRoom(
   const roomDoc = snap.docs[0];
   const room = roomDoc.data() as Room;
 
+  const isAlreadyInRoom = !!room.players?.[player.id];
+
+  if (!isAlreadyInRoom && room.status !== "waiting") {
+    throw new Error("Permainan sudah dimulai");
+  }
+
   const isGhost = typeof window !== "undefined" && localStorage.getItem("TANRA_GHOST_MODE") === "true";
 
   const playerCount = Object.keys(room.players || {}).length;
-  if (!isGhost && playerCount >= room.settings.maxPlayers) {
+  if (!isGhost && !isAlreadyInRoom && playerCount >= room.settings.maxPlayers) {
     throw new Error("Room penuh");
   }
 
-  await updateDoc(doc(db, "rooms", roomDoc.id), {
-    [`players.${player.id}`]: { ...player, isReady: isGhost ? true : false, isGhost },
-  });
+  if (!isAlreadyInRoom) {
+    await updateDoc(doc(db, "rooms", roomDoc.id), {
+      [`players.${player.id}`]: { ...player, isReady: isGhost ? true : false, isGhost },
+    });
+  }
 
   return roomDoc.id;
 }
@@ -111,13 +119,15 @@ export async function startGame(
   players: Player[],
   wordPair: { civilian: string; impostor: string },
   impostorIds: string[],
-  mrWhiteIds: string[] = []
+  mrWhiteIds: string[] = [],
+  jesterIds: string[] = []
 ): Promise<void> {
   const playerUpdates: Record<string, unknown> = {};
 
   players.forEach((p) => {
     const isImpostor = impostorIds.includes(p.id);
     const isMrWhite = mrWhiteIds.includes(p.id);
+    const isJester = jesterIds.includes(p.id);
     
     let role = "civilian";
     let word = wordPair.civilian;
@@ -128,6 +138,10 @@ export async function startGame(
     } else if (isMrWhite) {
       role = "mr_white";
       word = "KOSONG";
+    } else if (isJester) {
+      role = "jester";
+      // Jester sees the civilian word so they can intentionally look sus by missing it
+      word = wordPair.civilian;
     }
 
     playerUpdates[`players.${p.id}.role`] = role;
@@ -147,12 +161,14 @@ export async function startGame(
     "gameState.round": 1,
     "gameState.impostorIds": impostorIds,
     "gameState.mrWhiteIds": mrWhiteIds,
+    "gameState.jesterIds": jesterIds,
     "gameState.clueOrder": shuffledOrder,
     "gameState.currentClueIndex": 0,
     "gameState.timerEnd": Date.now() + 8000,
     "gameState.timerDuration": 8,
     "gameState.revealedWord": null,
     "gameState.winner": null,
+    "gameState.startedAt": Date.now(),
   });
 }
 
@@ -178,7 +194,7 @@ export async function eliminatePlayer(roomId: string, playerId: string) {
 
 export async function endGame(
   roomId: string,
-  winner: "civilian" | "impostor" | "mr_white",
+  winner: "civilian" | "impostor" | "mr_white" | "jester",
   revealedWord: { civilian: string; impostor: string }
 ) {
   await updateDoc(doc(db, "rooms", roomId), {
@@ -186,6 +202,7 @@ export async function endGame(
     "gameState.phase": "result",
     "gameState.winner": winner,
     "gameState.revealedWord": revealedWord,
+    "gameState.endedAt": Date.now(),
   });
 }
 
@@ -206,5 +223,18 @@ export async function resetRoom(roomId: string) {
     "gameState.revealedWord": null,
     "gameState.impostorIds": [],
     "gameState.mrWhiteIds": [],
+    "gameState.jesterIds": [],
+  });
+}
+
+export async function deleteRoom(roomId: string) {
+  await deleteDoc(doc(db, "rooms", roomId));
+}
+
+export async function claimHost(roomId: string, newHostId: string, oldHostId: string) {
+  await updateDoc(doc(db, "rooms", roomId), {
+    hostId: newHostId,
+    [`players.${newHostId}.isHost`]: true,
+    [`players.${oldHostId}.isHost`]: false,
   });
 }

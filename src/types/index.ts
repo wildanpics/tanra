@@ -1,4 +1,4 @@
-export type Role = "civilian" | "impostor" | "mr_white";
+export type Role = "civilian" | "impostor" | "mr_white" | "jester";
 
 export type GamePhase =
   | "waiting"
@@ -6,6 +6,7 @@ export type GamePhase =
   | "clue"
   | "discussion"
   | "voting"
+  | "voting-reveal"
   | "result";
 
 export type Difficulty = "easy" | "medium" | "hard";
@@ -24,6 +25,7 @@ export interface Player {
   isHost?: boolean;
   joinedAt?: number;
   isGhost?: boolean;
+  isBot?: boolean;
 }
 
 export interface WordPair {
@@ -32,6 +34,7 @@ export interface WordPair {
   impostor: string;
   category: string;
   difficulty: Difficulty;
+  clues?: string[]; // Hardcoded clues for bot AI
 }
 
 export interface Message {
@@ -58,14 +61,19 @@ export interface GameState {
   timerDuration?: number;
   impostorIds?: string[];
   mrWhiteIds?: string[];
+  jesterIds?: string[];
   eliminatedPlayers?: string[];
-  winner?: "civilian" | "impostor" | "mr_white" | null;
+  eliminatedPending?: string | null;
+  winner?: "civilian" | "impostor" | "mr_white" | "jester" | null;
   revealedWord?: { civilian: string; impostor: string };
+  wordPair?: WordPair; // the complete pair + clues for bots
   clueOrder?: string[];
   currentClueIndex?: number;
   sabotagedPlayerId?: string | null;
   sabotageUsed?: boolean;
   settings?: RoomSettings;
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export interface RoomSettings {
@@ -77,6 +85,7 @@ export interface RoomSettings {
   difficulty: Difficulty;
   category: string;
   mrWhiteCount: number;
+  jesterCount: number;
   hiddenDeath: boolean;
   micMode: "auto" | "open";
   impostorSabotage: boolean;
@@ -101,4 +110,8 @@ export interface UserProfile {
   createdAt: number;
   gamesPlayed?: number;
   wins?: number;
+  impostorWins?: number;
+  civilianWins?: number;
+  mrWhiteWins?: number;
+  jesterWins?: number;
 }

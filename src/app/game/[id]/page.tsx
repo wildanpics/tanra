@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/features/auth/AuthContext";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useRoom, useMessages, sendMessage, castVote, updateGameState } from "@/features/room/useRoom";
-import { advancePhase, eliminatePlayer, endGame } from "@/services/roomService";
+import { advancePhase, eliminatePlayer, endGame, claimHost } from "@/services/roomService";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Timer } from "@/components/ui/Timer";
@@ -16,9 +16,11 @@ import { MicButton } from "@/components/game/MicButton";
 import { RoleReveal } from "@/components/game/RoleReveal";
 import { VotingPanel } from "@/components/game/VotingPanel";
 import { useAudioEngine } from "@/hooks/useAudioEngine";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
+import { useBotLogic } from "@/hooks/useBotLogic";
 import { Player, GamePhase } from "@/types";
 import { getPhaseLabel } from "@/lib/utils";
-import { LogOut, Mic, MicOff, MessageCircle, X, Users, Play, XOctagon, Eye, EyeOff, FastForward } from "lucide-react";
+import { LogOut, Mic, MicOff, MessageCircle, X, Users, Play, XOctagon, Eye, EyeOff, FastForward, PenLine } from "lucide-react";
 
 export default function GamePage() {
   const params = useParams();
@@ -31,8 +33,6 @@ export default function GamePage() {
 
   const [showChat, setShowChat] = useState(false);
   const [showRoleReveal, setShowRoleReveal] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  const [speakingPlayers, setSpeakingPlayers] = useState<Set<string>>(new Set());
   const [selectedVote, setSelectedVote] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [showWordHint, setShowWordHint] = useState(false);
@@ -40,8 +40,63 @@ export default function GamePage() {
   const [flyingEmotes, setFlyingEmotes] = useState<{id: string, emoji: string, left: number}[]>([]);
   const [toastMessages, setToastMessages] = useState<{id: string, username: string, text: string}[]>([]);
   const [showSabotageSelect, setShowSabotageSelect] = useState(false);
+  
+  const [showMrWhiteGuess, setShowMrWhiteGuess] = useState(false);
+  const [mrWhiteGuess, setMrWhiteGuess] = useState("");
+  const [justDied, setJustDied] = useState(false);
+  const prevIsAlive = useRef<boolean | undefined>(undefined);
 
+  const [showNotepad, setShowNotepad] = useState(false);
+  const [notepadText, setNotepadText] = useState("");
+
+  // Load notepad
+  useEffect(() => {
+    if (roomId && profile?.uid) {
+      const saved = localStorage.getItem(`TANRA_NOTES_${roomId}_${profile.uid}`);
+      if (saved) setNotepadText(saved);
+    }
+  }, [roomId, profile?.uid]);
+
+  // Save notepad
+  useEffect(() => {
+    if (roomId && profile?.uid) {
+      localStorage.setItem(`TANRA_NOTES_${roomId}_${profile.uid}`, notepadText);
+    }
+  }, [notepadText, roomId, profile?.uid]);
   const { initAudio, playTick, playDramaticReveal, playElimination, startBGM, stopBGM } = useAudioEngine();
+
+  const [lkToken, setLkToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (!profile || !roomId) return;
+    async function fetchToken() {
+      try {
+        const res = await fetch("/api/livekit-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomName: roomId,
+            userId: profile!.uid,
+            username: profile!.username,
+          }),
+        });
+        const data = await res.json();
+        if (data.token) {
+          setLkToken(data.token);
+        }
+      } catch (err) {
+        console.error("Gagal mendapatkan token LiveKit", err);
+      }
+    }
+    fetchToken();
+  }, [profile, roomId]);
+
+  const { isMuted, toggleMute, setMuteState, speakingParticipants: speakingPlayers, connected } = useVoiceChat({
+    roomName: roomId,
+    userId: profile?.uid || "",
+    username: profile?.username || "",
+    token: lkToken,
+    livekitUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || "",
+  });
 
   useEffect(() => {
     initAudio();
@@ -80,8 +135,63 @@ export default function GamePage() {
     if (me?.votedFor) {
       setHasVoted(true);
       setSelectedVote(me.votedFor);
+    } else {
+      setHasVoted(false);
+      setSelectedVote(null);
     }
   }, [me?.votedFor]);
+
+  // Handle Death Overlay
+  useEffect(() => {
+    if (prevIsAlive.current === true && me?.isAlive === false) {
+      setJustDied(true);
+      playElimination();
+      setTimeout(() => setJustDied(false), 3000);
+    }
+    prevIsAlive.current = me?.isAlive;
+  }, [me?.isAlive, playElimination]);
+
+  // Host AFK check
+  const [hostIsAFK, setHostIsAFK] = useState(false);
+  useEffect(() => {
+    if (isHost || !gameState?.timerEnd) {
+      setHostIsAFK(false);
+      return;
+    }
+    const interval = setInterval(() => {
+      const remaining = gameState.timerEnd! - Date.now();
+      setHostIsAFK(remaining <= -10000); // 10 seconds past 0
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isHost, gameState?.timerEnd]);
+
+  async function handleClaimHost() {
+    if (!profile || !room) return;
+    await claimHost(roomId, profile.uid, room.hostId);
+  }
+
+  async function submitMrWhiteGuess() {
+    if (!room || !profile) return;
+    const civilianWord = players.find(p => p.role === "civilian")?.word || "";
+    const endWordImpostor = players.find(p => p.role === "impostor")?.word || "";
+    
+    if (mrWhiteGuess.trim().toLowerCase() === civilianWord.toLowerCase()) {
+      await endGame(roomId, "mr_white", { civilian: civilianWord, impostor: endWordImpostor });
+      router.push(`/result/${roomId}`);
+    } else {
+      setShowMrWhiteGuess(false);
+      playElimination();
+      await eliminatePlayer(roomId, profile.uid);
+      await sendMessage(roomId, {
+        playerId: "system",
+        username: "System",
+        avatar: "",
+        text: `${profile.username} (Mr. White) salah menebak kata dan bunuh diri!`,
+        timestamp: Date.now(),
+        type: "system",
+      });
+    }
+  }
 
   // Handle game aborted or finished
   useEffect(() => {
@@ -120,15 +230,15 @@ export default function GamePage() {
     }
 
     if (room?.settings.micMode === "open") {
-      setIsMuted(false);
+      setMuteState(false);
     } else {
       if (isMyTurn) {
-        setIsMuted(false);
+        setMuteState(false);
       } else if (phase === "clue" && !isMyTurn) {
-        setIsMuted(true);
+        setMuteState(true);
       }
     }
-  }, [isMyTurn, phase, room?.settings.micMode, playDramaticReveal, startBGM, stopBGM]);
+  }, [isMyTurn, phase, room?.settings.micMode, playDramaticReveal, startBGM, stopBGM, setMuteState]);
 
   // Handle Live Emotes & Chat Toast
   useEffect(() => {
@@ -169,14 +279,27 @@ export default function GamePage() {
     if (!gameState?.timerEnd) return;
     const interval = setInterval(() => {
       const remaining = Math.round((gameState.timerEnd! - Date.now()) / 1000);
-      if (remaining > 0 && remaining <= 10) {
+      if (remaining > 0 && remaining <= 10 && phase !== "voting-reveal") {
         playTick();
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [gameState?.timerEnd, playTick]);
+  }, [gameState?.timerEnd, playTick, phase]);
 
-  async function handleNextTurn() {
+  // Fast drumroll tick for voting-reveal
+  useEffect(() => {
+    if (phase === "voting-reveal") {
+      let ticks = 0;
+      const interval = setInterval(() => {
+        playTick();
+        ticks++;
+        if (ticks > 10) clearInterval(interval);
+      }, 350);
+      return () => clearInterval(interval);
+    }
+  }, [phase, playTick]);
+
+  const handleNextTurn = useCallback(async () => {
     if (!room) return;
     if (phase === "clue") {
       const nextIdx = (gameState?.currentClueIndex ?? 0) + 1;
@@ -188,7 +311,11 @@ export default function GamePage() {
         });
       }
     }
-  }
+  }, [room, phase, roomId, gameState?.currentClueIndex, gameState?.clueOrder?.length]);
+
+  // Bot Logic Hook (Only runs if user is Host)
+  useBotLogic(room, isHost, handleNextTurn);
+
 
   async function skipPhase() {
     if (!isHost) return;
@@ -209,6 +336,8 @@ export default function GamePage() {
       await advancePhase(roomId, "voting", room!.settings?.votingTime || 60);
     } else if (phase === "voting") {
       await processVotes();
+    } else if (phase === "voting-reveal") {
+      await executeVotingResult();
     }
   }
 
@@ -249,10 +378,42 @@ export default function GamePage() {
       }
     }
 
+    // Instead of executing immediately, go to voting-reveal phase for 5 seconds
+    await advancePhase(roomId, "voting-reveal", 5, {
+      "gameState.eliminatedPending": eliminated || null,
+    });
+  }
+
+  async function executeVotingResult() {
+    if (!room || !isHost) return;
+    
+    const eliminated = gameState?.eliminatedPending;
+
     if (eliminated) {
+      const isJester = gameState?.jesterIds?.includes(eliminated);
+      const eliminatedPlayer = players.find((p) => p.id === eliminated);
+
+      if (isJester) {
+        playElimination();
+        await eliminatePlayer(roomId, eliminated);
+        const endWordCivilian = players.find(p => p.role === "civilian")?.word || "";
+        const endWordImpostor = players.find(p => p.role === "impostor")?.word || "";
+        
+        await sendMessage(roomId, {
+          playerId: "system",
+          username: "System",
+          avatar: "",
+          text: `HAHAHA! ${eliminatedPlayer?.username} adalah JESTER! Mereka berhasil menipu kalian untuk mem-vote-nya!`,
+          timestamp: Date.now(),
+          type: "system",
+        });
+        
+        await endGame(roomId, "jester", { civilian: endWordCivilian, impostor: endWordImpostor });
+        return; // Jester wins instantly!
+      }
+
       playElimination();
       await eliminatePlayer(roomId, eliminated);
-      const eliminatedPlayer = players.find((p) => p.id === eliminated);
       const isImpostor = gameState?.impostorIds?.includes(eliminated);
       
       await sendMessage(roomId, {
@@ -309,10 +470,14 @@ export default function GamePage() {
       return;
     }
 
+    const newClueOrder = (gameState?.clueOrder || []).filter(id => id !== eliminated && players.find(p => p.id === id)?.isAlive);
+
     // Reset votes for next round
     const extraUpdates: Record<string, unknown> = {
       "gameState.round": (gameState?.round || 1) + 1,
       "gameState.currentClueIndex": 0,
+      "gameState.clueOrder": newClueOrder,
+      "gameState.eliminatedPending": null, // clean up
     };
     
     players.forEach(p => {
@@ -328,7 +493,7 @@ export default function GamePage() {
   }
 
   async function handleVote(targetId: string) {
-    if (!profile || hasVoted || phase !== "voting") return;
+    if (!profile || hasVoted || phase !== "voting" || !me?.isAlive) return;
     setSelectedVote(targetId);
     setHasVoted(true);
     await castVote(roomId, profile.uid, targetId);
@@ -355,6 +520,70 @@ export default function GamePage() {
     <div className="min-h-dvh w-full flex justify-center bg-[#0E1116]">
       <div className="w-full max-w-md relative overflow-hidden flex flex-col sm:border-x sm:border-[#262B33]/30 shadow-2xl bg-[#0E1116]">
         <div className="absolute inset-0 batik-overlay opacity-20 pointer-events-none" />
+
+      {/* Voting Reveal Overlay (Drumroll) */}
+      <AnimatePresence>
+        {phase === "voting-reveal" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[60] bg-[#0E1116] flex flex-col items-center justify-center"
+          >
+            <motion.div
+              animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
+              transition={{ repeat: Infinity, duration: 0.5 }}
+              className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(166,61,64,0.3)_0%,transparent_60%)] pointer-events-none"
+            />
+            <motion.h2
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-[#F5F5F5] font-display text-2xl font-black z-10 mb-8 tracking-widest text-center"
+            >
+              MENGHITUNG SUARA...
+            </motion.h2>
+            
+            {gameState?.eliminatedPending && (
+              <motion.div
+                initial={{ opacity: 0, y: 50, scale: 0.5 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ delay: 2, type: "spring", stiffness: 200, damping: 20 }}
+                className="z-10 flex flex-col items-center relative"
+              >
+                <img
+                  src={players.find(p => p.id === gameState.eliminatedPending)?.avatar}
+                  className="w-32 h-32 rounded-full border-4 border-[#A63D40] shadow-[0_0_50px_rgba(166,61,64,0.8)]"
+                  onError={(e) => { (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${players.find(p => p.id === gameState.eliminatedPending)?.username}`; }}
+                />
+                <p className="mt-4 text-white text-2xl font-bold">
+                  {players.find(p => p.id === gameState.eliminatedPending)?.username}
+                </p>
+                <motion.div
+                  initial={{ opacity: 0, scale: 5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 4, duration: 0.2 }}
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                >
+                  <div className="border-8 border-[#A63D40] text-[#A63D40] text-4xl font-black px-6 py-2 rotate-[-15deg] bg-black/50 backdrop-blur-sm whitespace-nowrap shadow-2xl rounded-lg uppercase tracking-widest">
+                    DISINGKIRKAN
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+            
+            {!gameState?.eliminatedPending && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 2 }}
+                className="z-10 text-white text-xl font-bold px-8 text-center"
+              >
+                SUARA SEIMBANG! TIDAK ADA YANG DIEKSEKUSI
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Role Reveal Overlay */}
       <AnimatePresence>
@@ -407,6 +636,54 @@ export default function GamePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Mr White Guess Modal */}
+      <AnimatePresence>
+        {showMrWhiteGuess && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-[#0E1116]/95 backdrop-blur-sm flex flex-col items-center justify-center p-6"
+          >
+            <h3 className="text-white font-display font-bold text-2xl mb-2">TEBAK KATA WARGA</h3>
+            <p className="text-[#8A8F98] text-sm text-center mb-6">Jika kamu benar, kamu memenangkan permainan. Jika salah, kamu langsung mati.</p>
+            
+            <input
+              value={mrWhiteGuess}
+              onChange={(e) => setMrWhiteGuess(e.target.value)}
+              placeholder="Masukkan tebakanmu..."
+              className="w-full max-w-xs bg-[#0E1116] border border-[#262B33] rounded-xl px-4 py-3 text-center text-white mb-6 focus:border-[#C8A96B]"
+            />
+            
+            <div className="flex gap-3 w-full max-w-xs">
+              <Button variant="secondary" onClick={() => setShowMrWhiteGuess(false)} fullWidth>Batal</Button>
+              <Button onClick={submitMrWhiteGuess} className="bg-[#A63D40] hover:bg-red-600 border-none text-white" fullWidth>Tembak!</Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Eliminated Jump Scare Overlay */}
+      <AnimatePresence>
+        {justDied && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6"
+          >
+            <motion.div
+              animate={{ x: [-10, 10, -10, 10, 0], y: [-10, 10, -10, 10, 0] }}
+              transition={{ duration: 0.4, ease: "easeInOut", repeat: 2 }}
+            >
+              <h1 className="text-red-600 font-display font-black text-5xl md:text-6xl text-center uppercase tracking-tighter mix-blend-screen drop-shadow-[0_0_30px_rgba(220,38,38,0.8)]">
+                KAMU DISINGKIRKAN
+              </h1>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
         
       {/* TOP BAR (Floating Pill) */}
         <motion.div
@@ -424,6 +701,11 @@ export default function GamePage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {hostIsAFK && !isHost && (
+              <Button onClick={handleClaimHost} size="sm" className="bg-[#A63D40]/80 border border-[#A63D40] text-xs h-8 mr-2 hover:bg-[#A63D40] text-white">
+                Ambil Alih Host
+              </Button>
+            )}
             {isHost && (
               <>
                 <button 
@@ -487,11 +769,20 @@ export default function GamePage() {
                 </div>
               ) : (
                 <div className="flex flex-col items-center">
-                  <p className="text-[#F5F5F5] text-sm">
+                  <p className="text-[#F5F5F5] text-sm flex items-center gap-2">
                     Giliran:{" "}
                     <span className="text-[#C8A96B] font-semibold text-lg ml-1">
                       {players.find((p) => p.id === gameState?.clueOrder?.[gameState?.currentClueIndex ?? 0])?.username}
                     </span>
+                    {isHost && (
+                      <button 
+                        onClick={handleNextTurn} 
+                        className="p-1 bg-[#A63D40]/20 text-[#A63D40] rounded-full hover:bg-[#A63D40] hover:text-white transition-colors"
+                        title="Lewati Pemain (Skip)"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </p>
                   <button
                     onClick={() => setShowWordHint(!showWordHint)}
@@ -526,6 +817,17 @@ export default function GamePage() {
                 >
                   <XOctagon size={14} className="mr-1" />
                   Sabotase Warga
+                </Button>
+              )}
+
+              {myRole === "mr_white" && me?.isAlive && (
+                <Button 
+                  onClick={() => setShowMrWhiteGuess(true)} 
+                  size="sm"
+                  className="mt-1 bg-white/10 text-white border-white/20 hover:bg-white hover:text-black"
+                >
+                  <Eye size={14} className="mr-1" />
+                  Tebak Kata Warga
                 </Button>
               )}
 
@@ -606,6 +908,7 @@ export default function GamePage() {
             onVote={handleVote}
             isHost={isHost}
             onForceEnd={skipPhase}
+            isObserver={!me?.isAlive || me?.isGhost}
           />
         )}
       </div>
@@ -627,7 +930,19 @@ export default function GamePage() {
             ))}
           </div>
 
-          <div className="glass rounded-full p-2 flex items-center justify-between shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-[#C8A96B]/20 pointer-events-auto">
+          <div className="glass rounded-full p-2 flex items-center justify-between gap-1 shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-[#C8A96B]/20 pointer-events-auto">
+            {/* Notepad Toggle */}
+            <motion.button
+              onClick={() => setShowNotepad(!showNotepad)}
+              whileTap={{ scale: 0.9 }}
+              className="relative flex items-center justify-center w-12 h-12 rounded-full transition-colors group"
+            >
+              <div className={`absolute inset-0 rounded-full transition-colors ${
+                showNotepad ? "bg-[#C8A96B]/20" : "bg-transparent group-hover:bg-white/5"
+              }`} />
+              <PenLine size={20} className={showNotepad ? "text-[#C8A96B]" : "text-[#8A8F98]"} />
+            </motion.button>
+
             {/* Chat Toggle */}
             <motion.button
               onClick={() => setShowChat(!showChat)}
@@ -649,7 +964,7 @@ export default function GamePage() {
             <div className="mx-2">
               <MicButton
                 isMuted={isMuted}
-                onToggle={() => setIsMuted(!isMuted)}
+                onToggle={toggleMute}
               />
             </div>
 
@@ -664,6 +979,43 @@ export default function GamePage() {
             </motion.button>
           </div>
         </div>
+
+      {/* Notepad Drawer */}
+      <AnimatePresence>
+        {showNotepad && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowNotepad(false)}
+              className="absolute inset-0 bg-black/50 z-30"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 400, damping: 40 }}
+              className="absolute bottom-0 inset-x-0 h-[60vh] bg-[#171B22] border-t border-[#262B33] rounded-t-3xl z-40 flex flex-col overflow-hidden shadow-[0_-10px_40px_rgba(0,0,0,0.5)]"
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-[#262B33]">
+                <h3 className="font-semibold text-sm flex items-center gap-2 text-[#C8A96B]"><PenLine size={16}/> Buku Catatan Pribadi</h3>
+                <button onClick={() => setShowNotepad(false)} className="text-[#8A8F98] text-sm hover:text-white transition-colors">
+                  Tutup
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden p-4">
+                <textarea
+                  value={notepadText}
+                  onChange={(e) => setNotepadText(e.target.value)}
+                  placeholder="Ketik rahasia dan petunjuk di sini...&#10;Contoh: Si Budi bilang daun. Si Siti bohong."
+                  className="w-full h-full bg-[#0E1116] border border-[#262B33] rounded-2xl p-4 text-[#F5F5F5] placeholder-[#8A8F98]/50 focus:outline-none focus:border-[#C8A96B]/50 transition-colors resize-none text-sm leading-relaxed"
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Chat Drawer */}
       <AnimatePresence>

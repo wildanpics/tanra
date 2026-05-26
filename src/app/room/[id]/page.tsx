@@ -7,7 +7,7 @@ import { Copy, Crown, LogOut, Play, Users, Check, Settings } from "lucide-react"
 import { useAuth } from "@/features/auth/AuthContext";
 import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useRoom, updatePlayerReady, sendMessage } from "@/features/room/useRoom";
-import { startGame, removePlayer, updateRoomSettings } from "@/services/roomService";
+import { startGame, removePlayer, updateRoomSettings, deleteRoom } from "@/services/roomService";
 import { getRandomWordPair } from "@/services/wordService";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +24,8 @@ export default function RoomPage() {
   const { room, loading, error } = useRoom(roomId);
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [customCivilianWord, setCustomCivilianWord] = useState("");
+  const [customImpostorWord, setCustomImpostorWord] = useState("");
 
   const allPlayers = Object.values(room?.players || {}) as Player[];
   const players = allPlayers.filter(p => !p.isGhost);
@@ -69,14 +71,32 @@ export default function RoomPage() {
     if (!isHost || !canStart || !room) return;
     setStarting(true);
     try {
-      const wordPair = await getRandomWordPair(room.settings.difficulty, room.settings.category);
-      const calculatedCount = Math.max(1, Math.floor(players.length / 3));
-      const impostorCount = Math.min(room.settings.impostorCount, calculatedCount);
-      const mrWhiteCount = Math.min(room.settings.mrWhiteCount, players.length - impostorCount - 1 > 0 ? 1 : 0);
+      let wordPair;
+      if (room.settings.category === "Kustom") {
+        if (!customCivilianWord.trim() || !customImpostorWord.trim()) {
+          alert("Silakan isi Kata Warga dan Kata Penipu untuk mode Kustom!");
+          setStarting(false);
+          return;
+        }
+        wordPair = { civilian: customCivilianWord.trim(), impostor: customImpostorWord.trim() };
+      } else {
+        wordPair = await getRandomWordPair(room.settings.difficulty, room.settings.category);
+      }
+      const targetImpostors = room.settings.impostorCount;
+      const mrWhiteCount = room.settings.mrWhiteCount || 0;
+      const jesterCount = room.settings.jesterCount || 0;
+      const totalSpecial = targetImpostors + mrWhiteCount + jesterCount;
+
+      if (totalSpecial >= players.length) {
+        alert("Jumlah pemain spesial (Penipu + Mr White + Jester) tidak boleh melebihi atau sama dengan total pemain.");
+        setStarting(false);
+        return;
+      }
       
       const shuffled = shuffleArray(players);
-      let impostorIds = shuffled.slice(0, impostorCount).map((p) => p.id);
-      let mrWhiteIds = shuffled.slice(impostorCount, impostorCount + mrWhiteCount).map((p) => p.id);
+      let impostorIds = shuffled.slice(0, targetImpostors).map((p) => p.id);
+      let mrWhiteIds = shuffled.slice(targetImpostors, targetImpostors + mrWhiteCount).map((p) => p.id);
+      let jesterIds = shuffled.slice(targetImpostors + mrWhiteCount, totalSpecial).map((p) => p.id);
 
       // DEV CHEAT: Force Role
       const forceRole = typeof window !== "undefined" ? localStorage.getItem("TANRA_FORCE_ROLE") : null;
@@ -88,14 +108,14 @@ export default function RoomPage() {
       } else if (forceRole === "civilian" && profile?.uid) {
         impostorIds = impostorIds.filter(id => id !== profile.uid);
         mrWhiteIds = mrWhiteIds.filter(id => id !== profile.uid);
-        if (impostorIds.length < impostorCount) {
+        if (impostorIds.length < targetImpostors) {
           const candidates = players.filter(p => p.id !== profile.uid && !impostorIds.includes(p.id));
           if (candidates.length > 0) impostorIds.push(candidates[0].id);
         }
       }
       if (typeof window !== "undefined") localStorage.removeItem("TANRA_FORCE_ROLE");
 
-      await startGame(roomId, players, wordPair, impostorIds, mrWhiteIds);
+      await startGame(roomId, players, wordPair, impostorIds, mrWhiteIds, jesterIds);
       await sendMessage(roomId, {
         playerId: "system",
         username: "System",
@@ -111,20 +131,43 @@ export default function RoomPage() {
     }
   }
 
+  async function addBot() {
+    if (!isHost || !room) return;
+    const botId = `bot_${Date.now()}`;
+    const botNames = ["Jason", "Nova", "Alex", "Sam", "Charlie", "Max", "Riley", "Taylor", "Jordan", "Casey"];
+    const randomName = botNames[Math.floor(Math.random() * botNames.length)];
+    const botPlayer: Player = {
+      id: botId,
+      username: `Bot_${randomName}`,
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${botId}`,
+      isAlive: true,
+      isReady: true,
+      isBot: true,
+    };
+    const { updateDoc, doc } = await import("firebase/firestore");
+    const { db } = await import("@/lib/firebase");
+    await updateDoc(doc(db, "rooms", roomId), {
+      [`players.${botId}`]: botPlayer
+    });
+  }
+
   async function leaveRoom() {
     if (!profile) return;
     try {
       const remainingPlayers = players.filter(p => p.id !== profile.uid);
-      const updates: Record<string, any> = {};
       
-      if (isHost && remainingPlayers.length > 0) {
-        // Pindahkan takhta Host ke pemain pertama yang masih ada
-        const newHost = remainingPlayers[0];
-        updates.hostId = newHost.id;
-        updates[`players.${newHost.id}.isHost`] = true;
+      if (remainingPlayers.length === 0) {
+        await deleteRoom(roomId);
+      } else {
+        const updates: Record<string, any> = {};
+        if (isHost) {
+          // Pindahkan takhta Host ke pemain pertama yang masih ada
+          const newHost = remainingPlayers[0];
+          updates.hostId = newHost.id;
+          updates[`players.${newHost.id}.isHost`] = true;
+        }
+        await removePlayer(roomId, profile.uid, updates);
       }
-      
-      await removePlayer(roomId, profile.uid, updates);
     } catch (err) {
       console.error("Gagal keluar:", err);
     }
@@ -203,9 +246,19 @@ export default function RoomPage() {
         {/* Players List */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <GlassCard className="mb-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Users size={16} className="text-[#C8A96B]" />
-              <p className="font-semibold text-sm">Pemain ({players.length})</p>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-[#C8A96B]" />
+                <p className="font-semibold text-sm">Pemain ({players.length})</p>
+              </div>
+              {isHost && (
+                <button 
+                  onClick={addBot}
+                  className="px-3 py-1 bg-[#171B22] border border-[#262B33] rounded-lg text-xs font-bold text-[#C8A96B] hover:bg-[#C8A96B]/10 transition-colors"
+                >
+                  + Tambah Bot
+                </button>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -311,11 +364,20 @@ export default function RoomPage() {
                 className={`text-center p-2 bg-[#0E1116] rounded-xl border border-transparent ${isHost ? "hover:border-[#C8A96B]/50 cursor-pointer" : ""}`}
               >
                 <p className="text-[#C8A96B] font-bold text-sm">{(room?.settings.mrWhiteCount || 0) > 0 ? "Ya" : "Tidak"}</p>
-                <p className="text-[#8A8F98] text-[10px] uppercase">Si Kosong (Mr.White)</p>
+                <p className="text-[#8A8F98] text-[10px] uppercase">Si Kosong</p>
               </button>
 
               <button 
-                onClick={() => cycleSetting("category", ["Semua Kategori", "Makanan", "Hewan", "Tempat", "Profesi"])}
+                onClick={() => cycleSetting("jesterCount", [0, 1])}
+                disabled={!isHost}
+                className={`text-center p-2 bg-[#0E1116] rounded-xl border border-transparent ${isHost ? "hover:border-[#C8A96B]/50 cursor-pointer" : ""}`}
+              >
+                <p className="text-[#C8A96B] font-bold text-sm">{(room?.settings.jesterCount || 0) > 0 ? "Ya" : "Tidak"}</p>
+                <p className="text-[#8A8F98] text-[10px] uppercase">Si Badut (Jester)</p>
+              </button>
+
+              <button 
+                onClick={() => cycleSetting("category", ["Semua Kategori", "Makanan", "Hewan", "Tempat", "Profesi", "Kustom"])}
                 disabled={!isHost}
                 className={`text-center p-2 bg-[#0E1116] rounded-xl border border-transparent ${isHost ? "hover:border-[#C8A96B]/50 cursor-pointer" : ""}`}
               >
@@ -359,6 +421,39 @@ export default function RoomPage() {
                 <p className="text-[#8A8F98] text-[10px] uppercase">Sabotase</p>
               </button>
             </div>
+
+            {/* Custom Words Input (Only when Kustom is selected) */}
+            {room?.settings.category === "Kustom" && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="mt-4 p-4 border border-[#C8A96B]/30 rounded-xl bg-[#C8A96B]/5 space-y-3"
+              >
+                <p className="text-[#C8A96B] text-xs font-bold uppercase tracking-wider">Kata Kustom (Hanya Host yang Tahu)</p>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={customCivilianWord}
+                      onChange={e => setCustomCivilianWord(e.target.value)}
+                      placeholder="Kata Warga"
+                      disabled={!isHost}
+                      className="w-full bg-[#0E1116] border border-[#262B33] rounded-lg px-3 py-2 text-sm text-[#F5F5F5] focus:border-[#C8A96B] outline-none"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={customImpostorWord}
+                      onChange={e => setCustomImpostorWord(e.target.value)}
+                      placeholder="Kata Penipu"
+                      disabled={!isHost}
+                      className="w-full bg-[#0E1116] border border-[#A63D40]/50 rounded-lg px-3 py-2 text-sm text-[#F5F5F5] focus:border-[#A63D40] outline-none"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
           </GlassCard>
         </motion.div>
       </div>

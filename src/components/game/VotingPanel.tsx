@@ -12,9 +12,10 @@ interface VotingPanelProps {
   onVote: (targetId: string) => void;
   isHost?: boolean;
   onForceEnd?: () => void;
+  isObserver?: boolean;
 }
 
-export function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isHost, onForceEnd }: VotingPanelProps) {
+export function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isHost, onForceEnd, isObserver }: VotingPanelProps) {
   const votablePlayers = players.filter((p) => p.isAlive);
 
   return (
@@ -26,23 +27,24 @@ export function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isH
       <div className="text-center mb-4">
         <h3 className="font-display text-[#C8A96B] font-bold text-lg">Pilih Pemain</h3>
         <p className="text-[#8A8F98] text-[10px] uppercase tracking-wider mt-1">
-          {hasVoted ? "Suaramu telah diberikan" : "Ketuk pemain yang mencurigakan"}
+          {isObserver ? "Kamu sedang menyimak" : hasVoted ? "Suaramu telah diberikan" : "Ketuk pemain yang mencurigakan"}
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         {votablePlayers.map((player) => {
           const isSelected = selectedVote === player.id;
+          const voters = players.filter(p => p.votedFor === player.id);
           return (
             <motion.button
               key={player.id}
-              onClick={() => !hasVoted && onVote(player.id)}
-              disabled={hasVoted}
-              whileTap={{ scale: hasVoted ? 1 : 0.95 }}
+              onClick={() => !hasVoted && !isObserver && onVote(player.id)}
+              disabled={hasVoted || isObserver}
+              whileTap={{ scale: hasVoted || isObserver ? 1 : 0.95 }}
               className={`relative flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all ${
                 isSelected
                   ? "bg-[#A63D40]/20 border-[#A63D40] shadow-[0_0_15px_rgba(166,61,64,0.3)]"
-                  : hasVoted
+                  : (hasVoted || isObserver)
                   ? "bg-[#0E1116] border-[#262B33] opacity-70 grayscale-[50%]"
                   : "bg-[#0E1116] border-[#262B33] hover:border-[#A63D40]/50"
               }`}
@@ -59,6 +61,25 @@ export function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isH
                 {player.username}
               </span>
               
+              {voters.length > 0 && (
+                <div className="flex -space-x-1.5 mt-0.5 justify-center w-full min-h-[20px]">
+                  {voters.map((voter, i) => (
+                    <motion.img
+                      key={voter.id}
+                      initial={{ scale: 0, x: -10 }}
+                      animate={{ scale: 1, x: 0 }}
+                      src={voter.avatar}
+                      alt={voter.username}
+                      className="w-5 h-5 rounded-full border border-[#171B22] object-cover shadow-sm"
+                      style={{ zIndex: voters.length - i }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${voter.username}`;
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              
               {isSelected && (
                 <div className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-gradient-to-br from-[#A63D40] to-[#8B3033] rounded-full flex items-center justify-center border-2 border-[#171B22] shadow-[0_0_10px_rgba(166,61,64,0.5)]">
                   <Check size={14} className="text-white" />
@@ -69,7 +90,7 @@ export function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isH
         })}
       </div>
 
-      {hasVoted && (
+      {(hasVoted || isObserver) && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
