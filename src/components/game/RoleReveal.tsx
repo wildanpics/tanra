@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Shield, Skull } from "lucide-react";
+import { User, Skull } from "lucide-react";
 import { Role } from "@/types";
 
 interface RoleRevealProps {
@@ -57,7 +57,7 @@ export function RoleReveal({ role, word, partnerNames, onClose }: RoleRevealProp
             ) : isJester ? (
               <Skull size={52} className="text-purple-400" />
             ) : (
-              <Shield size={52} className="text-[#C8A96B]" />
+              <User size={52} className="text-[#C8A96B]" />
             )}
           </div>
         </motion.div>

@@ -11,7 +11,7 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useRoom, updatePlayerReady } from "@/features/room/useRoom";
 import { resetRoom } from "@/services/roomService";
 import { Button } from "@/components/ui/Button";
-import { Trophy, Skull, Shield, Home, RotateCcw, Share2, Users, Clock, Flag } from "lucide-react";
+import { Trophy, Skull, User, Home, RotateCcw, Share2, Users, Clock, Flag } from "lucide-react";
 import { Player } from "@/types";
 
 export default function ResultPage() {
@@ -365,7 +365,7 @@ export default function ResultPage() {
             className="bg-[#171B22] border border-[#262B33] rounded-2xl p-4 mt-6"
           >
             <div className="flex items-center gap-2 mb-3">
-              <Shield size={14} className="text-[#C8A96B]" />
+              <User size={14} className="text-[#C8A96B]" />
               <p className="text-xs text-[#8A8F98] uppercase tracking-wider">Semua Pemain</p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -548,7 +548,7 @@ export default function ResultPage() {
               {/* Semua Pemain */}
               <div className="bg-[#080808]/80 backdrop-blur-xl border border-[#1A1A1A] rounded-[24px] p-4 shadow-lg">
                 <div className="flex items-center gap-2 mb-3">
-                  <Shield size={12} className="text-[#C8A96B]" />
+                  <Users size={12} className="text-[#C8A96B]" />
                   <p className="text-[9px] text-[#666666] uppercase tracking-[0.2em] font-semibold">Semua Pemain</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
