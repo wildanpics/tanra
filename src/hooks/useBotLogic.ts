@@ -44,6 +44,11 @@ export function useBotLogic(room: Room | null, isHost: boolean, onNextTurn: () =
   const lastPhaseRef = useRef<string>("");
   const lastClueIndexRef = useRef<number>(-1);
   const discussionChatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const roomRef = useRef<Room | null>(room);
+  
+  useEffect(() => {
+    roomRef.current = room;
+  }, [room]);
 
   useEffect(() => {
     if (!room || !isHost) return;
@@ -172,12 +177,16 @@ export function useBotLogic(room: Room | null, isHost: boolean, onNextTurn: () =
       // Make bots vote gradually
       aliveBots.forEach((bot, index) => {
         setTimeout(async () => {
+          // Use roomRef to get the LATEST state instead of stale closure
+          const currentRoom = roomRef.current;
+          if (!currentRoom || currentRoom.gameState?.phase !== "voting") return;
+
           // Re-fetch alive players
-          const latestAlive = Object.values(room.players).filter((p: any) => p.isAlive);
+          const latestAlive = Object.values(currentRoom.players).filter((p: any) => p.isAlive);
           
           // Bandwagon Logic: Check who currently has the most votes
           const voteCounts: Record<string, number> = {};
-          Object.values(room.players).forEach(p => {
+          Object.values(currentRoom.players).forEach(p => {
              if (p.votedFor) {
                voteCounts[p.votedFor] = (voteCounts[p.votedFor] || 0) + 1;
              }
@@ -204,7 +213,7 @@ export function useBotLogic(room: Room | null, isHost: boolean, onNextTurn: () =
           }
           
           if (target) {
-            await castVote(room.id, bot.id, target.id);
+            await castVote(currentRoom.id, bot.id, target.id);
           }
         }, 4000 + (index * 3000) + Math.random() * 2000); // Staggered votes with longer delay to allow humans to vote first
       });

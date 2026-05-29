@@ -60,7 +60,7 @@ export function useMessages(roomId: string | null) {
 
     const q = query(
       collection(db, "rooms", roomId, "messages"),
-      orderBy("timestamp", "asc"),
+      orderBy("timestamp", "desc"),
       limit(100)
     );
 
@@ -68,7 +68,8 @@ export function useMessages(roomId: string | null) {
       const msgs = snap.docs.map(
         (d) => ({ id: d.id, ...d.data() } as Message)
       );
-      setMessages(msgs);
+      // Reverse to display chronologically (oldest to newest)
+      setMessages(msgs.reverse());
     });
 
     return unsub;
@@ -116,7 +117,8 @@ export async function updateGameState(
 }
 
 export async function removePlayer(roomId: string, playerId: string) {
+  const { deleteField } = await import("firebase/firestore");
   await updateDoc(doc(db, "rooms", roomId), {
-    [`players.${playerId}`]: null,
+    [`players.${playerId}`]: deleteField(),
   });
 }

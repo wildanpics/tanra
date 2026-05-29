@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { PlayerAvatar } from "@/components/ui/PlayerAvatar";
 import { Player } from "@/types";
 import { shuffleArray } from "@/lib/utils";
+import { useAudioEngine } from "@/hooks/useAudioEngine";
 
 export default function RoomPage() {
   const params = useParams();
@@ -27,7 +28,9 @@ export default function RoomPage() {
   const [customCivilianWord, setCustomCivilianWord] = useState("");
   const [customImpostorWord, setCustomImpostorWord] = useState("");
 
-  const allPlayers = Object.values(room?.players || {}) as Player[];
+  const { initAudio } = useAudioEngine();
+
+  const allPlayers = Object.values(room?.players || {}).filter(Boolean) as Player[];
   const players = allPlayers.filter(p => !p.isGhost);
   const myPlayer = allPlayers.find((p) => p.id === profile?.uid);
   const isHost = room?.hostId === profile?.uid;
@@ -56,6 +59,7 @@ export default function RoomPage() {
 
   async function toggleReady() {
     if (!profile || !myPlayer) return;
+    initAudio(); // Initialize audio context on user interaction
     await updatePlayerReady(roomId, profile.uid, !myPlayer.isReady);
   }
 
@@ -69,6 +73,7 @@ export default function RoomPage() {
 
   async function handleStart() {
     if (!isHost || !canStart || !room) return;
+    initAudio(); // Initialize audio context on user interaction
     setStarting(true);
     try {
       let wordPair;

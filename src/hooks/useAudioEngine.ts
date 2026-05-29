@@ -2,27 +2,28 @@
 
 import { useEffect, useRef, useCallback } from "react";
 
+let globalAudioCtx: AudioContext | null = null;
+let globalIsEnabled = false;
+
 export function useAudioEngine() {
-  const audioCtxRef = useRef<AudioContext | null>(null);
   const bgmOscRef = useRef<OscillatorNode | null>(null);
   const bgmGainRef = useRef<GainNode | null>(null);
-  const isEnabled = useRef<boolean>(false);
 
   // Initialize audio context only after user interaction
   const initAudio = useCallback(() => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      isEnabled.current = true;
+    if (!globalAudioCtx) {
+      globalAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      globalIsEnabled = true;
     }
-    if (audioCtxRef.current.state === "suspended") {
-      audioCtxRef.current.resume();
+    if (globalAudioCtx.state === "suspended") {
+      globalAudioCtx.resume();
     }
   }, []);
 
   // 1. Ticking Sound (Short high-pitch click)
   const playTick = useCallback(() => {
-    if (!audioCtxRef.current || !isEnabled.current) return;
-    const ctx = audioCtxRef.current;
+    if (!globalAudioCtx || !globalIsEnabled) return;
+    const ctx = globalAudioCtx;
     
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -43,8 +44,8 @@ export function useAudioEngine() {
 
   // 2. Dramatic Reveal (Low bass swell)
   const playDramaticReveal = useCallback(() => {
-    if (!audioCtxRef.current || !isEnabled.current) return;
-    const ctx = audioCtxRef.current;
+    if (!globalAudioCtx || !globalIsEnabled) return;
+    const ctx = globalAudioCtx;
     
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -66,8 +67,8 @@ export function useAudioEngine() {
 
   // 3. Gavel / Elimination (Sharp impact)
   const playElimination = useCallback(() => {
-    if (!audioCtxRef.current || !isEnabled.current) return;
-    const ctx = audioCtxRef.current;
+    if (!globalAudioCtx || !globalIsEnabled) return;
+    const ctx = globalAudioCtx;
     
     // Impact oscillator
     const osc = ctx.createOscillator();
@@ -114,8 +115,8 @@ export function useAudioEngine() {
 
   // 4. BGM Discussion (Tense low heartbeat loop)
   const startBGM = useCallback(() => {
-    if (!audioCtxRef.current || !isEnabled.current) return;
-    const ctx = audioCtxRef.current;
+    if (!globalAudioCtx || !globalIsEnabled) return;
+    const ctx = globalAudioCtx;
     
     if (bgmOscRef.current) return; // Already playing
     
@@ -146,8 +147,8 @@ export function useAudioEngine() {
   }, []);
 
   const stopBGM = useCallback(() => {
-    if (bgmOscRef.current && bgmGainRef.current) {
-      bgmGainRef.current.gain.linearRampToValueAtTime(0, audioCtxRef.current!.currentTime + 1);
+    if (bgmOscRef.current && bgmGainRef.current && globalAudioCtx) {
+      bgmGainRef.current.gain.linearRampToValueAtTime(0, globalAudioCtx.currentTime + 1);
       setTimeout(() => {
         bgmOscRef.current?.stop();
         bgmOscRef.current = null;
