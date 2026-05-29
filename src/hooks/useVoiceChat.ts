@@ -10,6 +10,7 @@ import {
   createLocalAudioTrack,
   ParticipantEvent,
   TrackPublishOptions,
+  ConnectionState,
 } from "livekit-client";
 
 interface UseVoiceChatOptions {
@@ -83,7 +84,23 @@ export function useVoiceChat({
       })
       .catch(console.error);
 
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible" && roomRef.current) {
+        if (roomRef.current.state === ConnectionState.Disconnected) {
+          console.log("Reconnecting to LiveKit after visibility restored...");
+          try {
+            await roomRef.current.connect(livekitUrl, token, { autoSubscribe: true });
+          } catch (e) {
+            console.error("Failed to reconnect on visibility change:", e);
+          }
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       room.disconnect();
       roomRef.current = null;
     };

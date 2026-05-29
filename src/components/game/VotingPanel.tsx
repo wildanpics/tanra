@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Player } from "@/types";
 import { Check } from "lucide-react";
@@ -15,7 +16,7 @@ interface VotingPanelProps {
   isObserver?: boolean;
 }
 
-export function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isHost, onForceEnd, isObserver }: VotingPanelProps) {
+export const VotingPanel = memo(function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isHost, onForceEnd, isObserver }: VotingPanelProps) {
   const votablePlayers = players.filter((p) => p.isAlive);
 
   return (
@@ -114,4 +115,4 @@ export function VotingPanel({ players, myId, hasVoted, selectedVote, onVote, isH
       )}
     </motion.div>
   );
-}
+});

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { updateDoc, doc, increment } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import * as htmlToImage from "html-to-image";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/features/auth/AuthContext";
@@ -11,6 +10,11 @@ import { useAuthGuard } from "@/hooks/useAuthGuard";
 import { useRoom, updatePlayerReady } from "@/features/room/useRoom";
 import { resetRoom } from "@/services/roomService";
 import { Button } from "@/components/ui/Button";
+
+function getProxyImage(url?: string, seed?: string) {
+  const finalUrl = url || `https://api.dicebear.com/7.x/initials/svg?seed=${seed || "Guest"}`;
+  return `/api/image-proxy?url=${encodeURIComponent(finalUrl)}`;
+}
 import { Trophy, Skull, User, Home, RotateCcw, Share2, Users, Clock, Flag } from "lucide-react";
 import { Player } from "@/types";
 
@@ -102,6 +106,7 @@ export default function ResultPage() {
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     try {
+      const htmlToImage = await import("html-to-image");
       const dataUrl = await htmlToImage.toPng(shareCardRef.current, {
         cacheBust: true,
         quality: 1,
@@ -459,7 +464,7 @@ export default function ResultPage() {
             <div className={`absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full blur-[150px] opacity-60 ${bgGlowClass}`} />
 
             {/* Giant Background Text */}
-            <div className={`absolute top-[32%] left-1/2 -translate-x-1/2 -translate-y-1/2 font-display font-black text-[140px] tracking-tighter z-0 whitespace-nowrap pointer-events-none ${titleGlowColor}`}>
+            <div className={`absolute top-[32%] left-1/2 -translate-x-1/2 -translate-y-1/2 font-display font-black text-[120px] tracking-tighter z-0 whitespace-nowrap pointer-events-none ${titleGlowColor}`}>
               {titleText}
             </div>
 
@@ -472,18 +477,21 @@ export default function ResultPage() {
             {/* Avatar & Title Area */}
             <div className="relative z-10 flex flex-col items-center mb-6">
               {/* Avatar with double glowing ring */}
-              <div className="relative mb-5 mt-2">
+              <div className="relative mb-8 mt-4">
                 {/* Outer thin ring */}
                 <div className={`absolute inset-[-18px] rounded-full border opacity-50 ${avatarBorderClass}`} />
                 {/* Inner thick ring with shadow */}
                 <div className={`relative p-1.5 rounded-full ${avatarRingClass}`}>
-                  <div className={`w-28 h-28 rounded-full flex items-center justify-center font-display font-medium text-[50px] text-white shadow-inner ${avatarBgClass}`}>
-                    {myPlayer?.username.substring(0, 2).toUpperCase()}
-                  </div>
+                  <img 
+                    src={getProxyImage(myPlayer?.avatar, myPlayer?.username)} 
+                    alt="Avatar" 
+                    className={`w-28 h-28 rounded-full shadow-inner object-cover border-4 ${avatarBorderClass} bg-[#0E1116]`} 
+                    crossOrigin="anonymous"
+                  />
                 </div>
                 
                 {/* Role Badge */}
-                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 bg-[#0B0D12] border border-[#262B33] px-6 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] shadow-xl whitespace-nowrap">
+                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 bg-[#0B0D12] border border-[#262B33] px-6 py-2 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] shadow-xl whitespace-nowrap">
                   <span className={myPlayer?.role === "impostor" ? "text-white" : myPlayer?.role === "mr_white" ? "text-[#C8A96B]" : myPlayer?.role === "jester" ? "text-purple-400" : "text-[#F5F5F5]"}>
                     {myPlayer?.role === "impostor" ? "PENIPU" : myPlayer?.role === "jester" ? "SI BADUT" : myPlayer?.role === "mr_white" ? "SI KOSONG" : "WARGA"}
                   </span>
@@ -491,10 +499,10 @@ export default function ResultPage() {
               </div>
 
               {/* Title */}
-              <h1 className={`font-display text-[60px] font-black mt-4 mb-0 tracking-wider leading-none drop-shadow-2xl ${titleColor}`}>
+              <h1 className={`font-display text-[52px] font-black mt-4 mb-0 tracking-wider leading-[1.1] drop-shadow-2xl text-center px-4 ${titleColor}`}>
                 {titleText}
               </h1>
-              <p className="text-[#666666] text-[12px] font-medium tracking-wide mt-1">
+              <p className="text-[#666666] text-[12px] font-medium tracking-wide mt-2 text-center px-4">
                 {winner === "civilian" 
                   ? "Warga berhasil menemukan penipu!" 
                   : winner === "impostor"
@@ -535,9 +543,12 @@ export default function ResultPage() {
                 <div className="space-y-2">
                   {impostors.map((imp) => (
                     <div key={imp.id} className="flex items-center gap-3 p-2 bg-[#140A0A] rounded-[20px] border border-[#2A1618]">
-                      <div className="w-9 h-9 rounded-full bg-[#CC2222] flex items-center justify-center font-display font-bold text-white text-sm">
-                        {imp.username.substring(0, 2).toUpperCase()}
-                      </div>
+                      <img 
+                        src={getProxyImage(imp.avatar, imp.username)} 
+                        alt={imp.username}
+                        className="w-9 h-9 rounded-full object-cover border border-[#CC2222] bg-[#0E1116]"
+                        crossOrigin="anonymous"
+                      />
                       <span className="font-medium text-[14px] text-[#F5F5F5]">{imp.username}</span>
                       <span className="ml-auto text-[11px] text-[#A63D40] font-medium px-3">Penipu</span>
                     </div>
@@ -560,11 +571,14 @@ export default function ResultPage() {
                       <div key={player.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-full border text-[10px] font-medium ${
                         isImpostor ? "bg-[#140A0A] border-[#2A1618] text-[#A63D40]" : isMrWhite ? "bg-[#14110A] border-[#2A2316] text-[#C8A96B]" : isJester ? "bg-[#120A1A] border-[#20162A] text-purple-400" : "bg-[#111111] border-[#222222] text-[#888888]"
                       }`}>
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center font-display font-bold text-[8px] text-white ${
-                          isImpostor ? "bg-[#CC2222]" : isMrWhite ? "bg-[#C8A96B]" : isJester ? "bg-purple-600" : "bg-[#333333]"
-                        }`}>
-                          {player.username.substring(0, 1).toUpperCase()}
-                        </div>
+                        <img 
+                          src={getProxyImage(player.avatar, player.username)} 
+                          alt={player.username}
+                          className={`w-4 h-4 rounded-full object-cover border bg-[#0E1116] ${
+                            isImpostor ? "border-[#CC2222]" : isMrWhite ? "border-[#C8A96B]" : isJester ? "border-purple-600" : "border-[#333333]"
+                          }`}
+                          crossOrigin="anonymous"
+                        />
                         {player.username}
                       </div>
                     );

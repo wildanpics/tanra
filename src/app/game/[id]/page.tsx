@@ -45,6 +45,7 @@ export default function GamePage() {
   const [mrWhiteGuess, setMrWhiteGuess] = useState("");
   const [justDied, setJustDied] = useState(false);
   const prevIsAlive = useRef<boolean | undefined>(undefined);
+  const isAdvancingRef = useRef(false);
 
   const [showNotepad, setShowNotepad] = useState(false);
   const [notepadText, setNotepadText] = useState("");
@@ -104,7 +105,7 @@ export default function GamePage() {
 
   const gameState = room?.gameState;
   const phase = gameState?.phase as GamePhase;
-  const allPlayers = Object.values(room?.players || {}) as Player[];
+  const allPlayers = Object.values(room?.players || {}).filter(Boolean) as Player[];
   const players = allPlayers.filter((p) => !p.isGhost);
   const me = allPlayers.find((p) => p.id === profile?.uid);
   const alivePlayers = players.filter((p) => p.isAlive);
@@ -300,16 +301,21 @@ export default function GamePage() {
   }, [phase, playTick]);
 
   const handleNextTurn = useCallback(async () => {
-    if (!room) return;
-    if (phase === "clue") {
-      const nextIdx = (gameState?.currentClueIndex ?? 0) + 1;
-      if (nextIdx >= (gameState?.clueOrder?.length ?? 0)) {
-        await advancePhase(roomId, "discussion", room.settings.discussionTime);
-      } else {
-        await advancePhase(roomId, "clue", room.settings.clueTime, {
-          "gameState.currentClueIndex": nextIdx,
-        });
+    if (!room || isAdvancingRef.current) return;
+    isAdvancingRef.current = true;
+    try {
+      if (phase === "clue") {
+        const nextIdx = (gameState?.currentClueIndex ?? 0) + 1;
+        if (nextIdx >= (gameState?.clueOrder?.length ?? 0)) {
+          await advancePhase(roomId, "discussion", room.settings.discussionTime);
+        } else {
+          await advancePhase(roomId, "clue", room.settings.clueTime, {
+            "gameState.currentClueIndex": nextIdx,
+          });
+        }
       }
+    } finally {
+      setTimeout(() => { isAdvancingRef.current = false; }, 1000);
     }
   }, [room, phase, roomId, gameState?.currentClueIndex, gameState?.clueOrder?.length]);
 
@@ -318,28 +324,38 @@ export default function GamePage() {
 
 
   async function skipPhase() {
-    if (!isHost) return;
-    if (phase === "role-reveal") {
-      await advancePhase(roomId, "clue", room!.settings?.clueTime || 60, {
-        "gameState.currentClueIndex": 0,
-      });
-    } else if (phase === "clue") {
-      const nextIdx = (gameState?.currentClueIndex ?? 0) + 1;
-      if (nextIdx >= (gameState?.clueOrder?.length ?? 0)) {
-        await advancePhase(roomId, "discussion", room!.settings?.discussionTime || 120);
-      } else {
+    if (!isHost || isAdvancingRef.current) return;
+    isAdvancingRef.current = true;
+    try {
+      if (phase === "role-reveal") {
         await advancePhase(roomId, "clue", room!.settings?.clueTime || 60, {
-          "gameState.currentClueIndex": nextIdx,
+          "gameState.currentClueIndex": 0,
         });
+      } else if (phase === "clue") {
+        const nextIdx = (gameState?.currentClueIndex ?? 0) + 1;
+        if (nextIdx >= (gameState?.clueOrder?.length ?? 0)) {
+          await advancePhase(roomId, "discussion", room!.settings?.discussionTime || 120);
+        } else {
+          await advancePhase(roomId, "clue", room!.settings?.clueTime || 60, {
+            "gameState.currentClueIndex": nextIdx,
+          });
+        }
+      } else if (phase === "discussion") {
+        await advancePhase(roomId, "voting", room!.settings?.votingTime || 60);
+      } else if (phase === "voting") {
+        await processVotes();
+      } else if (phase === "voting-reveal") {
+        await executeVotingResult();
       }
-    } else if (phase === "discussion") {
-      await advancePhase(roomId, "voting", room!.settings?.votingTime || 60);
-    } else if (phase === "voting") {
-      await processVotes();
-    } else if (phase === "voting-reveal") {
-      await executeVotingResult();
+    } finally {
+      setTimeout(() => { isAdvancingRef.current = false; }, 1000);
     }
   }
+
+  const skipPhaseRef = useRef(skipPhase);
+  useEffect(() => {
+    skipPhaseRef.current = skipPhase;
+  });
 
   // Auto-advance phases (host only)
   useEffect(() => {
@@ -348,11 +364,13 @@ export default function GamePage() {
     const remaining = gameState.timerEnd - Date.now();
     
     if (remaining <= 0) {
-      skipPhase();
+      skipPhaseRef.current();
       return;
     }
 
-    const timeout = setTimeout(skipPhase, remaining);
+    const timeout = setTimeout(() => {
+      skipPhaseRef.current();
+    }, remaining);
     return () => clearTimeout(timeout);
   }, [isHost, phase, gameState?.timerEnd]);
 

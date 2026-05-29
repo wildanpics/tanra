@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send } from "lucide-react";
 import { Message } from "@/types";
@@ -15,7 +15,7 @@ interface ChatPanelProps {
   placeholder?: string;
 }
 
-export function ChatPanel({ roomId, messages, disabled, placeholder }: ChatPanelProps) {
+export const ChatPanel = memo(function ChatPanel({ roomId, messages, disabled, placeholder }: ChatPanelProps) {
   const { profile } = useAuth();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -118,4 +118,4 @@ export function ChatPanel({ roomId, messages, disabled, placeholder }: ChatPanel
       </div>
     </div>
   );
-}
+});
