@@ -71,6 +71,22 @@ export function useVoiceChat({
     room.on(RoomEvent.ParticipantConnected, () => updateParticipants(room));
     room.on(RoomEvent.ParticipantDisconnected, () => updateParticipants(room));
 
+    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      if (track.kind === Track.Kind.Audio) {
+        const element = track.attach();
+        element.id = `audio-${participant.identity}`;
+        document.body.appendChild(element);
+      }
+    });
+
+    room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+      track.detach();
+      const element = document.getElementById(`audio-${participant.identity}`);
+      if (element) {
+        element.remove();
+      }
+    });
+
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       const speakingIds = new Set(
         speakers.map((s) => s.identity)
